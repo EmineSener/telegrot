@@ -1,29 +1,29 @@
+from this import d
 import requests
 from bs4 import BeautifulSoup
 from src.common.logger import Logger
- 
+
 
 class Scraper:
-    site_url: str = "https://mdbf.btu.edu.tr/bilgisayar"
+    site_url: str = "https://mdbf.btu.edu.tr/tr/bilgisayar/duyuru/birim/193"
 
-    # gets announcement id: developed for getting last announcement and serializing it
-    # if announcement = 0 then gets the last announcement id
-    # if announcement = 1 then gets the last-1 announcement id
+    @staticmethod
+    def __get_content_from_url(url: str) -> str:
+        return requests.get(url).content
+
     @staticmethod
     def get_announcement_id(announcement: int) -> int:
         try:
-            params = {'page': 'duyuru'}
-
-            page = requests.get(Scraper.site_url, params=params, verify=False)
-            soup = BeautifulSoup(page.content, 'html.parser')
-            container = soup.find_all("div", {"class": "container"})[1]
-            row = container.find_all("div", {"class": "row"})[0]
-            column = row.find_all("div", {"class": "col-md-9"})[0]
+            content = Scraper.__get_content_from_url(Scraper.site_url)
+            soup = BeautifulSoup(content, 'html.parser')
+            announcement_list = soup.find_all(
+                'div', class_="ann-list")[0].find_all('ul')[0]
+            announcements = announcement_list.find_all('li')
 
             i = 0
-            for val in column.find_all('table'):
+            for val in announcements:
                 if i == announcement:
-                    return int(val.find_all('a')[0].get('href').split('&')[1].split('=')[1])
+                    return val.find_all('a')[0].get('href').split('/')[7]
                 i += 1
 
         except Exception as e:
@@ -40,22 +40,29 @@ class Scraper:
     @staticmethod
     def get_announcement_content_by_id(announcement: int) -> str:
         try:
-            params = {'page': 'duyuru', 'id': announcement}
+            content = Scraper.__get_content_from_url(Scraper.site_url)
+            soup = BeautifulSoup(content, 'html.parser')
+            announcement_list = soup.find_all(
+                'div', class_="ann-list")[0].find_all('ul')[0]
+            announcements = announcement_list.find_all('li')
 
-            page = requests.get(Scraper.site_url, params=params, verify=False)
-            soup = BeautifulSoup(page.content, 'html.parser')
-            container = soup.find_all("div", {"class": "container"})[1]
-            row = container.find_all("div", {"class": "row"})[0]
-            column = row.find_all("div", {"class": "col-md-9"})[0]
+            announcement_url = ""
 
-            panel = column.find_all("div", {"class": "panel"})[0]
-            panel_body = panel.find_all('div')[1].get_text()
-            panel_body += '\nİncelemek için: ' + str(Scraper.site_url) + '?'
+            for val in announcements:
+                if announcement in val.find_all('a')[0].get('href').split('/')[7]:
+                    announcement_url = val.find_all('a')[0].get('href')
 
-            for val in params.keys():
-                panel_body += str(val) + '=' + str(params[val]) + '&'
+            if announcement_url == "":
+                raise Exception(
+                    "there is no announcement suc this: {0}".format(announcement_url))
 
-            return panel_body.rstrip('&')
+            announcement_page = requests.get(announcement_url, verify=False)
+            soup = BeautifulSoup(announcement_page.content, 'html.parser')
+            announcement_text = soup.find_all('div', class_="page-about")[0].get_text()
+            announcement_text += '\nİncelemek için: ' + str(announcement_url) + '?'
+
+            return announcement_text
+
         except Exception as e:
             Logger.error("there is an error while getting announcement's content from website, Announcement number: {0}".format(
                 announcement), e)
